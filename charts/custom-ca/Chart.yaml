@@ -1,0 +1,5 @@
+apiVersion: v2
+name: custom-ca
+description: Configuration for deploying custom certificate authority
+type: application
+version: 0.1.0

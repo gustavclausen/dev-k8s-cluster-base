@@ -1,0 +1,7 @@
+certIssuer:
+  name: dev
+  ca:
+    tlsCert: ""
+    tlsKey: ""
+    secret:
+      namespace: cert-manager

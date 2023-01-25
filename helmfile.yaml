@@ -1,0 +1,87 @@
+environments:
+  default:
+    values:
+      - env.yaml
+---
+repositories:
+  - name: traefik
+    url: https://traefik.github.io/charts
+  - name: jetstack
+    url: https://charts.jetstack.io
+  - name: bedag
+    url: https://bedag.github.io/helm-charts
+
+releases:
+  - chart: jetstack/cert-manager
+    name: cert-manager
+    version: v1.11.0
+    namespace: cert-manager
+    disableValidationOnInstall: true
+    hooks:
+      - events: ["presync", "preapply"]
+        command: ./scripts/ensure-crds.sh
+        args:
+          [
+            "-n",
+            "{{`{{ .Release.Name }}`}}",
+            "-v",
+            "{{`{{ .Release.Version }}`}}",
+            "-s",
+            "https://github.com/cert-manager/cert-manager/releases/download/{{`{{.Release.Version}}`}}/cert-manager.crds.yaml",
+          ]
+  - chart: ./charts/custom-ca
+    name: custom-ca
+    namespace: cert-manager
+    version: 0.1.0
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - certIssuer:
+          name: dev
+          ca:
+            tlsKey:
+              {{.Values.tlsKeyRef | fetchSecretValue | toYaml | indent 14}}
+            tlsCert:
+              {{.Values.tlsCertRef | fetchSecretValue | toYaml | indent 14}}
+            secret:
+              namespace: cert-manager
+  - chart: bedag/raw
+    name: certificates
+    version: 2.0.0
+    namespace: traefik
+    needs:
+      - cert-manager/custom-ca
+    values:
+      - resources:
+          - apiVersion: cert-manager.io/v1
+            kind: Certificate
+            metadata:
+              name: wildcard-cert
+            spec:
+              secretName: wildcard-cert-secret
+              dnsNames:
+                - {{printf "*.%s" .Values.apexDomainName | quote}}
+              issuerRef:
+                name: dev
+                kind: ClusterIssuer
+
+  - chart: traefik/traefik
+    name: traefik
+    version: 20.8.0
+    namespace: traefik
+    needs:
+      - traefik/certificates
+    values:
+      - ingressRoute:
+          dashboard:
+            # WARNING: With this setting, the dashboard is exposed. This is ONLY intended for
+            # local development. Do not expose your dashboard without any protection over
+            # the internet!
+            matchRule:
+              Host(`{{ printf "traefik.%s" .Values.apexDomainName }}`) &&
+              (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
+            entryPoints: ["websecure"]
+        tlsStore:
+          default:
+            defaultCertificate:
+              secretName: wildcard-cert-secret

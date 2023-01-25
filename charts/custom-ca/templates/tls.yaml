@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: '{{ template "cluster-issuer-ca-secret" . }}'
+  namespace: "{{ .Values.certIssuer.ca.secret.namespace }}"
+type: kubernetes.io/tls
+data:
+  tls.crt: |
+    {{ required "A valid .Values.certIssuer.ca.tlsCert entry required!" .Values.certIssuer.ca.tlsCert | b64enc }}
+  tls.key: |
+    {{ required "A valid .Values.certIssuer.ca.tlsKey entry required!" .Values.certIssuer.ca.tlsKey | b64enc }}
